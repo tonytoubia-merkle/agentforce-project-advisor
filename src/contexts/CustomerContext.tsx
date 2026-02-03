@@ -197,12 +197,12 @@ export const CustomerProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [selectedPersonaId, selectPersona]);
 
-  // Auto-select anonymous persona on mount
+  // Show anonymous persona as selected in the dropdown on mount (no welcome flow)
   useEffect(() => {
     if (didAutoSelect.current) return;
     didAutoSelect.current = true;
     const anonId = space === 'b2b' ? 'anonymous-b2b' : 'anonymous-consumer';
-    selectPersona(anonId);
+    setSelectedPersonaId(anonId);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
