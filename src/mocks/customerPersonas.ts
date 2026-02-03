@@ -901,6 +901,10 @@ export function getPersonasBySpace(space: 'consumer' | 'b2b'): PersonaMeta[] {
   return PERSONAS.filter((p) => p.space === space);
 }
 
+export function getPersonaByEmail(email: string): PersonaMeta | undefined {
+  return PERSONAS.find((p) => p.profile.email && p.profile.email.toLowerCase() === email.toLowerCase());
+}
+
 export interface PersonaStub {
   id: string;
   merkuryId: string;

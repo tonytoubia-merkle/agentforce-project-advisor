@@ -10,6 +10,7 @@ import type { MockAgentSnapshot } from '@/services/mock/mockAgent';
 import type { AgentResponse } from '@/types/agent';
 import { getAgentforceClient } from '@/services/agentforce/client';
 import { getDataCloudWriteService } from '@/services/datacloud';
+import { useActivityToast } from '@/components/ActivityToast';
 import type { SceneSnapshot } from './SceneContext';
 
 const useMockData = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
@@ -312,7 +313,8 @@ export const ConversationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     'What do you recommend?',
   ]);
   const { processUIDirective, resetScene, getSceneSnapshot, restoreSceneSnapshot } = useScene();
-  const { customer, selectedPersonaId, space, _isRefreshRef, _onSessionReset } = useCustomer();
+  const { customer, selectedPersonaId, space, identifyByEmail, _isRefreshRef, _onSessionReset } = useCustomer();
+  const { showCapture } = useActivityToast();
   const messagesRef = useRef<AgentMessage[]>([]);
   const suggestedActionsRef = useRef<string[]>([]);
   const prevCustomerIdRef = useRef<string | null>(null);
@@ -516,7 +518,19 @@ export const ConversationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setSuggestedActions(response.suggestedActions || []);
       setIsAgentTyping(false);
 
-      if (response.uiDirective) {
+      // Handle identity capture directive
+      if (response.uiDirective?.action === 'IDENTIFY_CUSTOMER' && response.uiDirective.payload?.customerEmail) {
+        await identifyByEmail(response.uiDirective.payload.customerEmail);
+      }
+
+      // Fire activity toasts for background captures
+      if (response.uiDirective?.payload?.captures) {
+        for (const capture of response.uiDirective.payload.captures) {
+          showCapture(capture);
+        }
+      }
+
+      if (response.uiDirective && response.uiDirective.action !== 'IDENTIFY_CUSTOMER') {
         await processUIDirective(response.uiDirective);
       }
     } catch (error) {
@@ -530,7 +544,7 @@ export const ConversationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setMessages((prev) => [...prev, errorMessage]);
       setIsAgentTyping(false);
     }
-  }, [processUIDirective]);
+  }, [processUIDirective, identifyByEmail, showCapture]);
 
   const clearConversation = useCallback(() => {
     setMessages([]);

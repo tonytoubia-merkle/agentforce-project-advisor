@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import type { CustomerProfile } from '@/types/customer';
 import { resolveMerkuryIdentity } from '@/services/merkury/mockTag';
-import { getPersonaById } from '@/mocks/customerPersonas';
+import { getPersonaById, getPersonaByEmail } from '@/mocks/customerPersonas';
 import { getDataCloudService } from '@/services/datacloud';
 
 const useMockData = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
@@ -15,6 +15,7 @@ interface CustomerContextValue {
   space: 'consumer' | 'b2b';
   setSpace: (space: 'consumer' | 'b2b') => void;
   selectPersona: (personaId: string) => Promise<void>;
+  identifyByEmail: (email: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
   resetPersonaSession: (personaId: string) => void;
   _isRefreshRef: React.MutableRefObject<boolean>;
@@ -34,6 +35,7 @@ export const CustomerProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   );
   const isRefreshRef = useRef(false);
   const sessionResetCallbacksRef = useRef<Set<(personaId: string) => void>>(new Set());
+  const didAutoSelect = useRef(false);
 
   const onSessionReset = useCallback((cb: (personaId: string) => void) => {
     sessionResetCallbacksRef.current.add(cb);
@@ -129,6 +131,58 @@ export const CustomerProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [space]);
 
+  const identifyByEmail = useCallback(async (email: string) => {
+    if (!email) return;
+    console.log('[identity] Attempting to identify by email:', email);
+    isRefreshRef.current = true;
+
+    try {
+      if (useMockData) {
+        const persona = getPersonaByEmail(email);
+        if (persona) {
+          console.log('[identity] Matched mock persona:', persona.id);
+          setSelectedPersonaId(persona.id);
+          setCustomer(persona.profile);
+        } else {
+          console.log('[identity] No mock match — creating minimal known profile');
+          const knownProfile: CustomerProfile = {
+            id: `identified-${Date.now()}`,
+            name: email.split('@')[0],
+            email,
+            space,
+            projectProfile: {} as CustomerProfile['projectProfile'],
+            orders: [],
+            purchaseHistory: [],
+            chatSummaries: [],
+            meaningfulEvents: [],
+            browseSessions: [],
+            loyalty: null,
+            savedPaymentMethods: [],
+            shippingAddresses: [],
+            recentActivity: [],
+            merkuryIdentity: {
+              merkuryId: `MRK-EMAIL-${Date.now()}`,
+              identityTier: 'known',
+              confidence: 0.95,
+              resolvedAt: new Date().toISOString(),
+            },
+          };
+          setCustomer(knownProfile);
+        }
+      } else {
+        try {
+          const dataCloudService = getDataCloudService();
+          const profile = await dataCloudService.getCustomerProfile(email);
+          setCustomer(profile);
+        } catch (err) {
+          console.error('[identity] Data Cloud email lookup failed:', err);
+        }
+      }
+    } finally {
+      isRefreshRef.current = false;
+    }
+  }, [space]);
+
   const refreshProfile = useCallback(async () => {
     if (!selectedPersonaId) return;
     isRefreshRef.current = true;
@@ -143,11 +197,19 @@ export const CustomerProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [selectedPersonaId, selectPersona]);
 
+  // Auto-select anonymous persona on mount
+  useEffect(() => {
+    if (didAutoSelect.current) return;
+    didAutoSelect.current = true;
+    const anonId = space === 'b2b' ? 'anonymous-b2b' : 'anonymous-consumer';
+    selectPersona(anonId);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <CustomerContext.Provider value={{
       customer, selectedPersonaId, isLoading, isResolving, error,
       space, setSpace,
-      selectPersona, refreshProfile, resetPersonaSession,
+      selectPersona, identifyByEmail, refreshProfile, resetPersonaSession,
       _isRefreshRef: isRefreshRef, _onSessionReset: onSessionReset,
     }}>
       {children}

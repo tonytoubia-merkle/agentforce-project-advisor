@@ -1,15 +1,18 @@
 import { SceneProvider } from '@/contexts/SceneContext';
 import { ConversationProvider } from '@/contexts/ConversationContext';
 import { CustomerProvider } from '@/contexts/CustomerContext';
-import { ConciergePage } from '@/components/ConciergePage';
+import { AdvisorPage } from '@/components/AdvisorPage';
+import { ActivityToastProvider } from '@/components/ActivityToast';
 
 function App() {
   return (
     <CustomerProvider>
       <SceneProvider>
-        <ConversationProvider>
-          <ConciergePage />
-        </ConversationProvider>
+        <ActivityToastProvider>
+          <ConversationProvider>
+            <AdvisorPage />
+          </ConversationProvider>
+        </ActivityToastProvider>
       </SceneProvider>
     </CustomerProvider>
   );

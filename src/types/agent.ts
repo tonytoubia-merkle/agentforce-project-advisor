@@ -16,7 +16,15 @@ export type UIAction =
   | 'INITIATE_CHECKOUT'
   | 'CONFIRM_ORDER'
   | 'RESET_SCENE'
-  | 'REQUEST_QUOTE';
+  | 'REQUEST_QUOTE'
+  | 'IDENTIFY_CUSTOMER';
+
+export type CaptureType = 'contact_created' | 'meaningful_event' | 'profile_enrichment';
+
+export interface CaptureNotification {
+  type: CaptureType;
+  label: string;
+}
 
 export interface UIDirectivePayload {
   products?: Product[];
@@ -38,6 +46,8 @@ export interface UIDirectivePayload {
     useStoredPayment?: boolean;
     isQuote?: boolean;
   };
+  customerEmail?: string;
+  captures?: CaptureNotification[];
 }
 
 export interface UIDirective {

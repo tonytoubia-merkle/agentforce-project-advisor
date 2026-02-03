@@ -9,7 +9,7 @@ import { WelcomeScreen } from '@/components/WelcomeScreen/WelcomeScreen';
 import { WelcomeLoader } from '@/components/WelcomeScreen/WelcomeLoader';
 import { IdentityPanel } from '@/components/IdentityPanel/IdentityPanel';
 
-export const ConciergePage: React.FC = () => {
+export const AdvisorPage: React.FC = () => {
   const { scene } = useScene();
   const { messages, sendMessage, isAgentTyping, isLoadingWelcome, suggestedActions } = useConversation();
   const { space } = useCustomer();
