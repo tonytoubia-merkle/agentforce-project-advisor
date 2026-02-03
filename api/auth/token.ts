@@ -1,22 +1,10 @@
-import express from 'express';
-import cors from 'cors';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const app = express();
-const PORT = process.env.PORT || 3001;
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-app.use(cors());
-app.use(express.json());
-
-// Serve built frontend in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '..', 'dist')));
-}
-
-// OAuth token proxy — keeps client_secret off the browser
-app.post('/api/auth/token', async (req, res) => {
   const { clientId, clientSecret, instanceUrl } = req.body;
 
   if (!clientId || !clientSecret || !instanceUrl) {
@@ -49,20 +37,4 @@ app.post('/api/auth/token', async (req, res) => {
     console.error('[auth] Token proxy error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
-});
-
-// Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// SPA fallback — serve index.html for all non-API routes in production
-if (process.env.NODE_ENV === 'production') {
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
-  });
 }
-
-app.listen(PORT, () => {
-  console.log(`[server] Listening on http://localhost:${PORT}`);
-});
