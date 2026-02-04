@@ -8,6 +8,7 @@ import { CheckoutOverlay } from '@/components/CheckoutOverlay';
 import { WelcomeScreen } from '@/components/WelcomeScreen/WelcomeScreen';
 import { WelcomeLoader } from '@/components/WelcomeScreen/WelcomeLoader';
 import { IdentityPanel } from '@/components/IdentityPanel/IdentityPanel';
+import { RememberMeButton } from '@/components/RememberMeButton';
 
 export const AdvisorPage: React.FC = () => {
   const { scene } = useScene();
@@ -55,6 +56,11 @@ export const AdvisorPage: React.FC = () => {
       </AnimatePresence>
 
       <IdentityPanel />
+
+      {/* Remember Me button for anonymous users */}
+      <div className="fixed top-4 left-4 z-50">
+        <RememberMeButton />
+      </div>
     </div>
   );
 };

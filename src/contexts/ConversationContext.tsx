@@ -313,7 +313,7 @@ export const ConversationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     'What do you recommend?',
   ]);
   const { processUIDirective, resetScene, getSceneSnapshot, restoreSceneSnapshot } = useScene();
-  const { customer, selectedPersonaId, space, identifyByEmail, _isRefreshRef, _onSessionReset } = useCustomer();
+  const { customer, selectedPersonaId, space, isResolving, identifyByEmail, _isRefreshRef, _onSessionReset } = useCustomer();
   const { showCapture } = useActivityToast();
   const messagesRef = useRef<AgentMessage[]>([]);
   const suggestedActionsRef = useRef<string[]>([]);
@@ -361,6 +361,12 @@ export const ConversationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return;
     }
 
+    // Wait for identity resolution to complete before acting on persona changes
+    if (isResolving) {
+      console.log('[session] Identity resolution in progress — waiting...');
+      return;
+    }
+
     const prevPersonaId = prevPersonaIdRef.current;
     prevPersonaIdRef.current = selectedPersonaId;
 
@@ -385,7 +391,26 @@ export const ConversationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       console.log('[session] Restoring cached session for', selectedPersonaId, `(${cached.messages.length} messages)`);
       setMessages(cached.messages);
       setSuggestedActions(cached.suggestedActions);
-      restoreSceneSnapshot(cached.sceneSnapshot);
+
+      // Check if the cached scene has an incomplete background (was still loading when saved)
+      const sceneBg = cached.sceneSnapshot.background;
+      const isIncompleteBackground =
+        (sceneBg.type === 'generative' && (!sceneBg.value || sceneBg.isLoading)) ||
+        (sceneBg.type === 'image' && !sceneBg.value);
+
+      if (isIncompleteBackground) {
+        // Restore scene but use fallback background instead of incomplete one
+        console.log('[session] Cached scene had incomplete background, using fallback');
+        restoreSceneSnapshot({
+          ...cached.sceneSnapshot,
+          background: {
+            type: 'gradient',
+            value: 'linear-gradient(135deg, #1a2332 0%, #1e293b 50%, #0f172a 100%)',
+          },
+        });
+      } else {
+        restoreSceneSnapshot(cached.sceneSnapshot);
+      }
       setIsLoadingWelcome(false);
 
       if (useMockData && cached.mockSnapshot) {
@@ -484,7 +509,7 @@ export const ConversationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [customer, selectedPersonaId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [customer, selectedPersonaId, isResolving]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sendMessage = useCallback(async (content: string) => {
     const userMessage: AgentMessage = {

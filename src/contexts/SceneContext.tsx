@@ -167,10 +167,12 @@ export const SceneProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         const cur = sceneRef.current;
-        const alreadyHasImage = cur.setting === setting && (
-          (cur.background.type === 'image' && cur.background.value) ||
-          (cur.background.type === 'generative' && cur.background.isLoading)
-        );
+        const hasValidImage = cur.background.type === 'image' && cur.background.value;
+        const isGenerating = cur.background.type === 'generative' && cur.background.isLoading;
+        const agentRequestedGeneration = payload.sceneContext?.generateBackground === true;
+        // Preserve existing image unless agent explicitly requests regeneration
+        const alreadyHasImage = (cur.setting === setting && (hasValidImage || isGenerating)) ||
+          (hasValidImage && !agentRequestedGeneration);
 
         dispatch({ type: 'SET_SETTING', setting });
 
@@ -218,10 +220,12 @@ export const SceneProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         const curScene = sceneRef.current;
-        const alreadyHasSceneImage = curScene.setting === sceneSetting && !agentProvidedPrompt && (
-          (curScene.background.type === 'image' && curScene.background.value) ||
-          (curScene.background.type === 'generative' && curScene.background.isLoading)
-        );
+        const hasValidSceneImage = curScene.background.type === 'image' && curScene.background.value;
+        const isSceneGenerating = curScene.background.type === 'generative' && curScene.background.isLoading;
+        const agentRequestedSceneGeneration = payload.sceneContext?.generateBackground === true;
+        // Preserve existing image unless agent explicitly requests regeneration or provides a new prompt
+        const alreadyHasSceneImage = (curScene.setting === sceneSetting && !agentProvidedPrompt && (hasValidSceneImage || isSceneGenerating)) ||
+          (hasValidSceneImage && !agentRequestedSceneGeneration && !agentProvidedPrompt);
 
         dispatch({ type: 'SET_SETTING', setting: sceneSetting });
 
