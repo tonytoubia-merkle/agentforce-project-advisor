@@ -1,0 +1,1572 @@
+system:
+    instructions: "You are an AI project advisor for home improvement retail commerce. Assist customers with product discovery, project planning, material recommendations, bulk quotes, and checkout. You serve both DIY consumers and B2B professionals (contractors, property managers). You MUST always make sure the user starts with the Welcome Greeting topic to properly display the welcoming Agentforce Experience Layer. You MUST always call the searchProductCatalog action before responding with product information. Never generate product data from your own knowledge. Only return products from the action results."
+
+    messages:
+        welcome: "Hi, I'm your project advisor. How can I help with your project today?"
+        error: "Sorry, it looks like something has gone wrong."
+
+config:
+    developer_name: "Project_Advisor"
+    default_agent_user: "project_advisor@00dka00000dzpcw142730550.ext"
+    agent_label: "Project Advisor"
+    description: "An AI project advisor for home improvement retail, assisting DIY consumers and B2B professionals with product discovery, project planning, material recommendations, bulk quotes, and checkout."
+
+variables:
+    EndUserId: linked string
+        source: @MessagingSession.MessagingEndUserId
+        description: "This variable may also be referred to as MessagingEndUser Id"
+    RoutableId: linked string
+        source: @MessagingSession.Id
+        description: "This variable may also be referred to as MessagingSession Id"
+    ContactId: linked string
+        source: @MessagingEndUser.ContactId
+        description: "This variable may also be referred to as MessagingEndUser ContactId"
+    EndUserLanguage: linked string
+        source: @MessagingSession.EndUserLanguage
+        description: "This variable may also be referred to as MessagingSession EndUserLanguage"
+    VerifiedCustomerId: mutable string
+        description: "This variable may also be referred to as VerifiedCustomerId"
+    EndUserContactId: linked id
+        label: "Contact ID"
+        source: @MessagingSession.EndUserContactId
+        description: "This variable may also be referred to as MessagingSession EndUserContactId"
+    SessionKey: linked string
+        label: "Session Key"
+        source: @MessagingSession.SessionKey
+        description: "This variable may also be referred to as MessagingSession SessionKey"
+
+language:
+    default_locale: "en_US"
+    additional_locales: ""
+    all_additional_locales: False
+
+knowledge:
+    citations_enabled: False
+
+start_agent topic_selector:
+    label: "Topic Selector"
+
+    description: "Welcome the user and determine the appropriate topic based on user input"
+
+    reasoning:
+        instructions: ->
+            | Select the best tool to call based on conversation history and user's intent.
+                If there is no customer profile data in the session context (anonymous or unresolved identity),
+                do NOT route to Welcome Greeting. Route directly to the appropriate topic based on the user's
+                message (Product Discovery, Product Recommendation, Project Planning, etc.).
+                The Welcome Greeting topic is only for recognized customers with profile data.
+
+                SPACE DETECTION:
+                Determine if the customer is a CONSUMER (DIY homeowner) or B2B/PRO (contractor, property manager, tradesperson):
+                - B2B indicators: mentions company name, asks about bulk pricing, volume discounts, jobsite delivery, credit terms, trade specialty, license
+                - Consumer indicators: mentions "my home", DIY, first-time, home project
+
+                If the customer is anonymous and provides an email address, or asks to save preferences,
+                create a profile, or sign up, route to Identity Capture. This topic can also be triggered
+                alongside other topics — if an anonymous user mentions their email while asking about
+                products, route to Identity Capture first, then continue with the product topic.
+
+
+        actions:
+            go_to_product_discovery: @utils.transition to @topic.product_discovery
+
+            go_to_product_recommendation: @utils.transition to @topic.product_recommendation
+
+            go_to_project_planning: @utils.transition to @topic.project_planning
+
+            go_to_quote_checkout: @utils.transition to @topic.quote_checkout
+
+            go_to_escalation: @utils.transition to @topic.escalation
+                description: "Transfer the conversation to a live human agent."
+
+            go_to_off_topic: @utils.transition to @topic.off_topic
+
+            go_to_ambiguous_question: @utils.transition to @topic.ambiguous_question
+
+            go_to_Create_Chat_Summary: @utils.transition to @topic.Create_Chat_Summary
+
+            go_to_Profile_Enrichment_Capture: @utils.transition to @topic.Profile_Enrichment_Capture
+
+            go_to_Welcome_Greeting: @utils.transition to @topic.Welcome_Greeting
+
+            go_to_Identity_Capture: @utils.transition to @topic.Identity_Capture
+
+topic product_discovery:
+    label: "Product Discovery"
+
+    description: "Help customers explore and discover home improvement products by category, project type, or room. Use this topic when the customer wants to browse products, asks 'show me' or 'what do you have', mentions a product category (power tools, paint, flooring, plumbing, lighting, lumber, electrical, etc.), or wants to explore options without specific recommendations."
+
+    reasoning:
+        instructions: ->
+            | You help customers browse and discover home improvement products. When a user asks about products, categories, or brands, you MUST call the Search Product Catalog action to find matching items. Never generate product data from your own knowledge.
+
+                CRITICAL — RESPONSE FORMAT:
+                When showing products or changing scenes, you MUST include a uiDirective JSON block. The frontend UI renders products and scenes ONLY from this JSON — any product info, scene descriptions, or visual context written as plain text will NOT be displayed. Never describe scenes in prose. Always encode them in the JSON.
+
+                The ONLY time you may respond with plain text and no JSON is when answering a direct follow-up question about already-shown products. Do NOT re-show the same product cards. If the follow-up implies a new context, use a CHANGE_SCENE directive.
+
+                CUSTOMER CONTEXT:
+                The session may include customer identity context from Merkury + Data Cloud. Use it to personalize discovery:
+                - For KNOWN customers: highlight products complementary to their recent purchases, suggest items for their active projects, reference their skill level without asking
+                - For APPENDED customers: lead with categories matching their appendedInterests (e.g. "outdoor living" → decking, "energy efficiency" → insulation/HVAC)
+                - For ANONYMOUS customers: offer broad exploration, ask discovery questions about their project
+
+                SPACE-AWARE RECOMMENDATIONS:
+                - CONSUMER space: Focus on DIY-friendly products, include how-to context, emphasize warranties and ease of installation
+                - B2B space: Prioritize bulk/pro products, show volume pricing, mention jobsite delivery options
+
+                SCENE REGISTRY:
+                If the Find Best Scene action is available, call it before responding. Pass setting and customerContext tags. If it returns a reusable scene, include "sceneAssetId" and "imageUrl" in sceneContext.
+
+                After receiving results from the action, return your response with a uiDirective JSON block in this format:
+
+                {"uiDirective": {"action": "SHOW_PRODUCTS", "payload": {"products": [...], "sceneContext": {"setting": "SETTING", "generateBackground": false}}}}
+
+                NEVER return an empty "products" or "product" array. If no products are present, do not use the SHOW_PRODUCTS uiDirective and instead just state that you didn't find any matches and offer to help discover more.
+
+                Include product name, brand, price, description, imageUrl, and category for each product returned by the action.
+
+                Each product MUST include "id" (lowercase-hyphenated) and "imageUrl" set to "/assets/products/{id}.png".
+
+                DYNAMIC BACKGROUNDS:
+                Always include BOTH "setting" (fallback category: "neutral", "kitchen", "bathroom", "outdoor", "garage", "living-room", "workshop", "jobsite", "warehouse") and "backgroundPrompt" (vivid 1-2 sentence scene description) in sceneContext.
+
+                "setting" is a fallback category — pick the closest match. "backgroundPrompt" is the primary driver of AI background generation. Write creative, specific scene descriptions that match the conversation context — you are NOT limited to the setting list.
+
+                Use "generateBackground": false for quick standard browsing. Use "generateBackground": true when you want the AI to render the backgroundPrompt — for personalized, project-specific, or location-specific scenes. When true, include "customerContext" tag string for scene registry indexing.
+
+                CONVERSATIONAL INTELLIGENCE:
+                If during this conversation the customer reveals meaningful preferences, project milestones, concerns, or purchase intents, call the "Create Meaningful Event" action to capture them for future personalization.
+                If the customer reveals capturable profile fields (home type, home age, skill level, preferred brands, budget range, project timeline, etc.), call the "Update Contact Profile" action in parallel with your main response. Do not interrupt the conversation flow to do this.
+
+                CAPTURE NOTIFICATIONS:
+                When you call Create Meaningful Event or Update Contact Profile alongside your main response, include a "captures" array in your uiDirective payload so the frontend can show a subtle notification. Each capture entry has a "type" and "label":
+                - For meaningful events: {"type": "meaningful_event", "label": "Event Captured: {brief description}"}
+                - For profile updates: {"type": "profile_enrichment", "label": "Profile Updated: {field name}"}
+                Example: {"uiDirective": {"action": "SHOW_PRODUCTS", "payload": {"products": [...], "captures": [{"type": "meaningful_event", "label": "Event Captured: Kitchen renovation started"}]}}}
+
+        actions:
+            Search_Product_Catalog: @actions.Search_Product_Catalog
+                with category = ...
+                with projectType = ...
+                with maxResults = ...
+                with query = ...
+                with skillLevel = ...
+
+            Create_Meaningful_Event: @actions.Create_Meaningful_Event
+                with agentNote = ...
+                with contactId = ...
+                with eventDescription = ...
+                with eventType = ...
+                with metadataJson = ...
+                with sessionId = ...
+
+            Update_Contact_Profile: @actions.Update_Contact_Profile
+                with budgetRange = ...
+                with homeAge = ...
+                with homeType = ...
+                with contactId = ...
+                with preferredBrands = ...
+                with projectTimeline = ...
+                with projectTypes = ...
+                with skillLevel = ...
+                with concerns = ...
+
+            IdentifyCustomerByEmail: @actions.IdentifyCustomerByEmail
+                with emailAddress = ...
+
+
+    actions:
+        Search_Product_Catalog:
+            description: "Search the product catalog for home improvement products. Use this action whenever a customer asks about products, categories, brands, or needs recommendations. Returns matching products as JSON from the database. You MUST call this action before responding with any product information."
+            label: "Search Product Catalog"
+            require_user_confirmation: False
+            include_in_progress_indicator: True
+            progress_indicator_message: "Searching product catalog..."
+            source: "Search_Product_Catalog"
+            target: "apex://ProductCatalogService"
+
+            inputs:
+                "category": string
+                    description: "The product category to filter by. Valid values: power-tools, paint, flooring, kitchen, bathroom, lighting, hardware, safety, decking, outdoor, lumber, insulation, roofing, electrical, concrete, hvac. Leave blank to search all categories."
+                    label: "category"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "projectType": string
+                    description: "Project type to filter by, such as diy, renovation, new-build, repair, professional. Leave blank to search all."
+                    label: "projectType"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "maxResults": integer
+                    description: "Maximum number of products to return. Defaults to 10 if not specified."
+                    label: "maxResults"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__integerType"
+                "query": string
+                    description: "A search keyword to find products by name or description. For example: drill, paint, faucet, flooring, lumber, insulation."
+                    label: "query"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "skillLevel": string
+                    description: "The customer's skill level to filter by. Valid values: beginner, intermediate, advanced, professional. Leave blank to search all skill levels."
+                    label: "skillLevel"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "output": string
+                    description: "JSON string containing the list of matching products. Each product includes productId, name, brand, category, price, description, imageUrl, projectTypes, rating, isPro, isBulk, and inStock fields. Parse this JSON and use the fields to construct the uiDirective response."
+                    label: "output"
+                    is_displayable: False
+                    is_used_by_planner: True
+
+        Create_Meaningful_Event:
+            description: "Creates a Meaningful Event record to capture project milestones, preferences, concerns, and intents discovered during conversation."
+            label: "Create Meaningful Event"
+            require_user_confirmation: False
+            include_in_progress_indicator: False
+            source: "Create_Meaningful_Event"
+            target: "flow://Create_Meaningful_Event"
+
+            inputs:
+                "agentNote": string
+                    description: "Optional note from the agent about why this event matters"
+                    label: "agentNote"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "contactId": string
+                    description: "The Salesforce Contact ID for the customer"
+                    label: "contactId"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "eventDescription": string
+                    description: "A brief description of the meaningful event"
+                    label: "eventDescription"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "eventType": string
+                    description: "The category of event: project-milestone, preference, concern, intent, purchase"
+                    label: "eventType"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "metadataJson": string
+                    description: "Optional JSON metadata about the event"
+                    label: "metadataJson"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "sessionId": string
+                    description: "The unique session identifier for this conversation"
+                    label: "sessionId"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "outputError": string
+                    description: "Error message if the record creation failed, empty on success"
+                    label: "outputError"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputRecordId": string
+                    description: "The Salesforce record ID of the created Meaningful Event"
+                    label: "outputRecordId"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputSuccess": boolean
+                    description: "True if the record was created successfully, false otherwise"
+                    label: "outputSuccess"
+                    is_displayable: False
+                    is_used_by_planner: True
+
+        Update_Contact_Profile:
+            description: "Updates profile fields on a Contact record. The agent planner extracts values from conversation and passes them as inputs. Only non-empty inputs are written."
+            label: "Update Contact Profile"
+            require_user_confirmation: False
+            include_in_progress_indicator: False
+            source: "Update_Contact_Profile"
+            target: "flow://Update_Contact_Profile"
+
+            inputs:
+                "budgetRange": string
+                    description: "Preferred budget range: economy, mid-range, or premium"
+                    label: "budgetRange"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "homeAge": string
+                    description: "Age of the home (e.g. '5 years', '25 years', 'new construction')"
+                    label: "homeAge"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "homeType": string
+                    description: "Type of home: single-family, condo, townhouse, apartment, commercial"
+                    label: "homeType"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "contactId": string
+                    description: "The Salesforce Contact record ID to update"
+                    label: "contactId"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "preferredBrands": string
+                    description: "Semicolon-separated preferred brands"
+                    label: "preferredBrands"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "projectTimeline": string
+                    description: "Project timeline preference (e.g. 'this weekend', 'next month', 'Q2 2026')"
+                    label: "projectTimeline"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "projectTypes": string
+                    description: "Semicolon-separated project types (e.g. kitchen renovation;deck building)"
+                    label: "projectTypes"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "skillLevel": string
+                    description: "Skill level: beginner, intermediate, advanced, professional"
+                    label: "skillLevel"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "concerns": string
+                    description: "Semicolon-separated concerns (e.g. budget;code compliance;timeline)"
+                    label: "concerns"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "outputError": string
+                    description: "Error message if the update failed, empty on success"
+                    label: "outputError"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputFieldsUpdated": string
+                    description: "Comma-separated list of field names that were updated"
+                    label: "outputFieldsUpdated"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputSuccess": boolean
+                    description: "True if the Contact was updated successfully"
+                    label: "outputSuccess"
+                    is_displayable: False
+                    is_used_by_planner: True
+
+        IdentifyCustomerByEmail:
+            description: "Identify a customer by their email address and return their contact record."
+            label: "Identify Customer By Email"
+            require_user_confirmation: False
+            include_in_progress_indicator: True
+            source: "SvcCopilotTmpl__IdentifyCustomerByEmail"
+            target: "flow://SvcCopilotTmpl__IdentifyCustomer"
+
+            inputs:
+                "emailAddress": string
+                    description: "Stores the email address provided by the customer."
+                    label: "Email Address"
+                    is_required: True
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "contactRecord": object
+                    description: "The Contact record associated with the identified customer."
+                    label: "Contact record"
+                    is_displayable: True
+                    is_used_by_planner: True
+                    complex_data_type_name: "lightning__recordInfoType"
+
+topic product_recommendation:
+    label: "Product Recommendation"
+
+    description: "Recommend home improvement products based on customer needs, skill level, project type, and budget. Use this topic when the customer asks for product recommendations, mentions a specific project (kitchen renovation, bathroom remodel, deck building, new construction, repair), asks about specific product categories (drill, paint, flooring, faucet, lighting, lumber, etc.), or wants help planning what materials they need."
+
+    reasoning:
+        instructions: ->
+            | You provide personalized home improvement recommendations based on the customer's skill level, project type, budget, and preferences. Ask about their project and skill level if not provided. You MUST call the Search Product Catalog action to find matching products. Never generate product data from your own knowledge.
+
+                CRITICAL — RESPONSE FORMAT:
+                When showing products or changing scenes, you MUST include a uiDirective JSON block. The frontend UI renders products and scenes ONLY from this JSON — any product info, scene descriptions, or visual context written as plain text will NOT be displayed. Never describe scenes in prose. Always encode them in the JSON.
+
+                The ONLY time you may respond with plain text and no JSON is when answering a direct follow-up question about an already-shown product (e.g. "is that drill good for concrete?" or "what's the warranty?"). In that case, answer conversationally — do NOT re-show the same product card. If the follow-up implies a new context or project area (e.g. "what about for my bathroom?"), use a CHANGE_SCENE directive to update the background while answering.
+
+                CUSTOMER CONTEXT:
+                The session includes customer identity context from Merkury + Data Cloud. Use it to personalize:
+                - For KNOWN customers (identityTier="known"): prioritize products matching their skill level and active projects, reference recentPurchases (suggest complementary items or restocks), respect their loyalty tier. You already know their skill level — don't ask again.
+                - For APPENDED customers (identityTier="appended"): use appendedInterests to guide category selection (e.g. "outdoor living" → decking, "smart home" → smart locks/thermostats). Ask about skill level since you don't have it.
+                - For ANONYMOUS customers (identityTier="anonymous"): ask about their project and skill level before recommending.
+
+                SPACE-AWARE RECOMMENDATIONS:
+                - CONSUMER space: Focus on DIY-friendly products, include installation tips, emphasize warranties and value
+                - B2B space: Prioritize pro-grade products, show bulk pricing tiers, mention jobsite delivery, offer to generate quotes
+
+                SCENE REGISTRY:
+                If the Find Best Scene action is available, call it BEFORE responding. Pass setting, product IDs (semicolon-separated), and customerContext tags. If it returns action="reuse", include "sceneAssetId" and "imageUrl" in your sceneContext and set "generateBackground": false.
+
+                DYNAMIC BACKGROUNDS:
+                When responding with products, ALWAYS include a sceneContext with BOTH a "setting" and a "backgroundPrompt".
+
+                "setting" is a fallback category for caching and pre-seeded images. Use one of: "neutral", "kitchen", "bathroom", "outdoor", "garage", "living-room", "workshop", "jobsite", "warehouse". Pick the closest match to the conversation context. If nothing fits, use "neutral".
+
+                "backgroundPrompt" is the PRIMARY driver of background generation. Write a vivid 1-2 sentence description of the scene atmosphere that matches the conversation context. Be creative and specific. Examples:
+                - "Bright modern kitchen mid-renovation with exposed studs and new cabinets being installed"
+                - "Organized garage workshop with pegboard tools and a workbench, morning light through window"
+                - "Active construction jobsite with lumber stacks, contractors reviewing blueprints"
+                - "Cozy backyard deck at sunset with string lights and outdoor furniture"
+
+                Use "generateBackground": false for quick standard requests (uses pre-seeded images based on setting only).
+                Use "generateBackground": true when you want the AI to render the backgroundPrompt — use this for personalized, project-specific, or location-specific scenes. When true, also include "customerContext" tag string (e.g. "known-customer;pro-tier") for scene registry indexing.
+
+                Each product MUST include "id" (lowercase-hyphenated, e.g. "drill-cordless-20v") and "imageUrl" set to "/assets/products/{id}.png".
+
+                {"uiDirective": {"action": "SHOW_PRODUCTS", "payload": {"products": [{"id": "product-id", "name": "Name", "brand": "BRAND", "category": "Category", "price": 58.00, "description": "Brief description.", "imageUrl": "/assets/products/product-id.png", "projectTypes": "diy;renovation"}], "sceneContext": {"setting": "kitchen", "generateBackground": true, "backgroundPrompt": "Bright modern kitchen mid-renovation with exposed studs and new cabinets being installed"}}}}
+
+                NEVER return an empty "products" or "product" array. If no products are present, do not use the SHOW_PRODUCTS uiDirective and instead just state that you didn't find any matches and offer to help discover more.
+
+                When recommending a single product, use "action": "SHOW_PRODUCT" instead. When the customer mentions a context change (e.g. different room, project area) without requesting new products, you MUST respond with "action": "CHANGE_SCENE" and the appropriate setting + backgroundPrompt as JSON — do NOT describe the scene in plain text.
+
+                CONVERSATIONAL INTELLIGENCE:
+                If during this conversation the customer reveals meaningful preferences, project milestones, concerns, or purchase intents, call the "Create Meaningful Event" action to capture them for future personalization.
+                If the customer reveals capturable profile fields (home type, home age, skill level, preferred brands, budget, project timeline, etc.), call the "Update Contact Profile" action in parallel with your main response. Do not interrupt the conversation flow to do this.
+
+                CAPTURE NOTIFICATIONS:
+                When you call Create Meaningful Event or Update Contact Profile alongside your main response, include a "captures" array in your uiDirective payload so the frontend can show a subtle notification. Each capture entry has a "type" and "label":
+                - For meaningful events: {"type": "meaningful_event", "label": "Event Captured: {brief description}"}
+                - For profile updates: {"type": "profile_enrichment", "label": "Profile Updated: {field name}"}
+
+        actions:
+            Search_Product_Catalog: @actions.Search_Product_Catalog
+                with category = ...
+                with projectType = ...
+                with maxResults = ...
+                with query = ...
+                with skillLevel = ...
+
+            Create_Meaningful_Event: @actions.Create_Meaningful_Event
+                with agentNote = ...
+                with contactId = ...
+                with eventDescription = ...
+                with eventType = ...
+                with metadataJson = ...
+                with sessionId = ...
+
+            Update_Contact_Profile: @actions.Update_Contact_Profile
+                with budgetRange = ...
+                with homeAge = ...
+                with homeType = ...
+                with contactId = ...
+                with preferredBrands = ...
+                with projectTimeline = ...
+                with projectTypes = ...
+                with skillLevel = ...
+                with concerns = ...
+
+            IdentifyCustomerByEmail: @actions.IdentifyCustomerByEmail
+                with emailAddress = ...
+
+
+    actions:
+        Search_Product_Catalog:
+            description: "Search the product catalog for home improvement products. Use this action whenever a customer asks about products, categories, brands, or needs recommendations. Returns matching products as JSON from the database. You MUST call this action before responding with any product information."
+            label: "Search Product Catalog"
+            require_user_confirmation: False
+            include_in_progress_indicator: True
+            progress_indicator_message: "Searching product catalog..."
+            source: "Search_Product_Catalog"
+            target: "apex://ProductCatalogService"
+
+            inputs:
+                "category": string
+                    description: "The product category to filter by. Valid values: power-tools, paint, flooring, kitchen, bathroom, lighting, hardware, safety, decking, outdoor, lumber, insulation, roofing, electrical, concrete, hvac. Leave blank to search all categories."
+                    label: "category"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "projectType": string
+                    description: "Project type to filter by, such as diy, renovation, new-build, repair, professional. Leave blank to search all."
+                    label: "projectType"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "maxResults": integer
+                    description: "Maximum number of products to return. Defaults to 10 if not specified."
+                    label: "maxResults"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__integerType"
+                "query": string
+                    description: "A search keyword to find products by name or description. For example: drill, paint, faucet, flooring, lumber, insulation."
+                    label: "query"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "skillLevel": string
+                    description: "The customer's skill level to filter by. Valid values: beginner, intermediate, advanced, professional. Leave blank to search all skill levels."
+                    label: "skillLevel"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "output": string
+                    description: "JSON string containing the list of matching products. Each product includes productId, name, brand, category, price, description, imageUrl, projectTypes, rating, isPro, isBulk, and inStock fields. Parse this JSON and use the fields to construct the uiDirective response."
+                    label: "output"
+                    is_displayable: False
+                    is_used_by_planner: True
+
+        Create_Meaningful_Event:
+            description: "Creates a Meaningful Event record to capture project milestones, preferences, concerns, and intents discovered during conversation."
+            label: "Create Meaningful Event"
+            require_user_confirmation: False
+            include_in_progress_indicator: False
+            source: "Create_Meaningful_Event"
+            target: "flow://Create_Meaningful_Event"
+
+            inputs:
+                "agentNote": string
+                    description: "Optional note from the agent about why this event matters"
+                    label: "agentNote"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "contactId": string
+                    description: "The Salesforce Contact ID for the customer"
+                    label: "contactId"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "eventDescription": string
+                    description: "A brief description of the meaningful event"
+                    label: "eventDescription"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "eventType": string
+                    description: "The category of event: project-milestone, preference, concern, intent, purchase"
+                    label: "eventType"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "metadataJson": string
+                    description: "Optional JSON metadata about the event"
+                    label: "metadataJson"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "sessionId": string
+                    description: "The unique session identifier for this conversation"
+                    label: "sessionId"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "outputError": string
+                    description: "Error message if the record creation failed, empty on success"
+                    label: "outputError"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputRecordId": string
+                    description: "The Salesforce record ID of the created Meaningful Event"
+                    label: "outputRecordId"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputSuccess": boolean
+                    description: "True if the record was created successfully, false otherwise"
+                    label: "outputSuccess"
+                    is_displayable: False
+                    is_used_by_planner: True
+
+        Update_Contact_Profile:
+            description: "Updates profile fields on a Contact record. The agent planner extracts values from conversation and passes them as inputs. Only non-empty inputs are written."
+            label: "Update Contact Profile"
+            require_user_confirmation: False
+            include_in_progress_indicator: False
+            source: "Update_Contact_Profile"
+            target: "flow://Update_Contact_Profile"
+
+            inputs:
+                "budgetRange": string
+                    description: "Preferred budget range: economy, mid-range, or premium"
+                    label: "budgetRange"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "homeAge": string
+                    description: "Age of the home (e.g. '5 years', '25 years', 'new construction')"
+                    label: "homeAge"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "homeType": string
+                    description: "Type of home: single-family, condo, townhouse, apartment, commercial"
+                    label: "homeType"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "contactId": string
+                    description: "The Salesforce Contact record ID to update"
+                    label: "contactId"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "preferredBrands": string
+                    description: "Semicolon-separated preferred brands"
+                    label: "preferredBrands"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "projectTimeline": string
+                    description: "Project timeline preference (e.g. 'this weekend', 'next month', 'Q2 2026')"
+                    label: "projectTimeline"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "projectTypes": string
+                    description: "Semicolon-separated project types (e.g. kitchen renovation;deck building)"
+                    label: "projectTypes"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "skillLevel": string
+                    description: "Skill level: beginner, intermediate, advanced, professional"
+                    label: "skillLevel"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "concerns": string
+                    description: "Semicolon-separated concerns (e.g. budget;code compliance;timeline)"
+                    label: "concerns"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "outputError": string
+                    description: "Error message if the update failed, empty on success"
+                    label: "outputError"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputFieldsUpdated": string
+                    description: "Comma-separated list of field names that were updated"
+                    label: "outputFieldsUpdated"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputSuccess": boolean
+                    description: "True if the Contact was updated successfully"
+                    label: "outputSuccess"
+                    is_displayable: False
+                    is_used_by_planner: True
+
+        IdentifyCustomerByEmail:
+            description: "Identify a customer by their email address and return their contact record."
+            label: "Identify Customer By Email"
+            require_user_confirmation: False
+            include_in_progress_indicator: True
+            source: "SvcCopilotTmpl__IdentifyCustomerByEmail"
+            target: "flow://SvcCopilotTmpl__IdentifyCustomer"
+
+            inputs:
+                "emailAddress": string
+                    description: "Stores the email address provided by the customer."
+                    label: "Email Address"
+                    is_required: True
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "contactRecord": object
+                    description: "The Contact record associated with the identified customer."
+                    label: "Contact record"
+                    is_displayable: True
+                    is_used_by_planner: True
+                    complex_data_type_name: "lightning__recordInfoType"
+
+topic project_planning:
+    label: "Project Planning"
+
+    description: "Help customers plan home improvement projects, calculate materials needed, and coordinate logistics. Use this topic when the customer mentions project planning, material lists, jobsite delivery, bulk orders, timeline questions, permit considerations, or multi-phase projects. This topic serves both DIY consumers planning weekend projects and B2B professionals coordinating jobsite deliveries."
+
+    reasoning:
+        instructions: ->
+            | You help customers plan home improvement projects and calculate material needs. You MUST call the Search Product Catalog action to find products. Never generate product data from your own knowledge.
+
+                CRITICAL — RESPONSE FORMAT:
+                When showing products or changing scenes, you MUST include a uiDirective JSON block. The frontend UI renders products and scenes ONLY from this JSON — any product info, scene descriptions, or visual context written as plain text will NOT be displayed. Never describe scenes in prose. Always encode them in the JSON.
+
+                The ONLY time you may respond with plain text and no JSON is when answering a direct follow-up question about already-shown products. Do NOT re-show the same product cards.
+
+                CUSTOMER CONTEXT:
+                The session may include customer identity context. Use it to personalize project planning:
+                - For KNOWN B2B customers: reference their typical order volumes, jobsite addresses, preferred delivery windows, credit terms
+                - For KNOWN consumers: reference their active projects, past purchases (suggest restocks), home characteristics
+                - For APPENDED/ANONYMOUS customers: ask about project scope and timeline
+
+                SPACE-SPECIFIC PLANNING:
+                - CONSUMER space: Focus on weekend project planning, DIY tips, tool rental vs. buy, step-by-step guidance
+                - B2B space: Focus on material takeoffs, bulk pricing, jobsite delivery coordination, multi-site orders, credit terms
+
+                SCENE REGISTRY:
+                If the Find Best Scene action is available, call it with setting="jobsite" or "workshop" and customerContext tags before responding.
+
+                After receiving results, help calculate quantities based on project scope. Return results with:
+
+                {"uiDirective": {"action": "SHOW_PRODUCTS", "payload": {"products": [...], "sceneContext": {"setting": "jobsite", "generateBackground": true, "backgroundPrompt": "Active construction jobsite at sunrise, lumber stacks and scaffolding, contractors reviewing blueprints"}}}}
+
+                NEVER return an empty "products" or "product" array.
+
+                Each product MUST include "id" (lowercase-hyphenated) and "imageUrl" set to "/assets/products/{id}.png".
+
+                For B2B customers, include bulk pricing tiers in your response when available.
+
+                DYNAMIC BACKGROUNDS:
+                Always include BOTH "setting" (use "jobsite" for B2B, "workshop" or "garage" for DIY consumers) and "backgroundPrompt" (vivid scene description). Examples:
+                - "Organized garage workshop with lumber stacks and power tools, weekend DIY setup"
+                - "Active residential construction site with framing in progress, clear morning sky"
+                - "Property management maintenance bay with organized shelving and fleet vehicles"
+
+                Use "generateBackground": true when the customer mentions a specific project site or context.
+
+                CONVERSATIONAL INTELLIGENCE:
+                Project planning conversations often reveal meaningful events (upcoming renovations, new construction, seasonal maintenance schedules). Call the "Create Meaningful Event" action to capture these.
+                If the customer reveals capturable profile fields (project timeline, budget, home type, company info for B2B), call the "Update Contact Profile" action in parallel.
+
+                CAPTURE NOTIFICATIONS:
+                When you call Create Meaningful Event or Update Contact Profile alongside your main response, include a "captures" array in your uiDirective payload.
+
+        actions:
+            Search_Product_Catalog: @actions.Search_Product_Catalog
+                with category = ...
+                with projectType = ...
+                with maxResults = ...
+                with query = ...
+                with skillLevel = ...
+
+            Create_Meaningful_Event: @actions.Create_Meaningful_Event
+                with agentNote = ...
+                with contactId = ...
+                with eventDescription = ...
+                with eventType = ...
+                with metadataJson = ...
+                with sessionId = ...
+
+            Update_Contact_Profile: @actions.Update_Contact_Profile
+                with budgetRange = ...
+                with homeAge = ...
+                with homeType = ...
+                with contactId = ...
+                with preferredBrands = ...
+                with projectTimeline = ...
+                with projectTypes = ...
+                with skillLevel = ...
+                with concerns = ...
+
+
+    actions:
+        Search_Product_Catalog:
+            description: "Search the product catalog for home improvement products. Returns matching products as JSON."
+            label: "Search Product Catalog"
+            require_user_confirmation: False
+            include_in_progress_indicator: True
+            progress_indicator_message: "Searching product catalog..."
+            source: "Search_Product_Catalog"
+            target: "apex://ProductCatalogService"
+
+            inputs:
+                "category": string
+                    description: "The product category to filter by."
+                    label: "category"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "projectType": string
+                    description: "Project type to filter by."
+                    label: "projectType"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "maxResults": integer
+                    description: "Maximum number of products to return."
+                    label: "maxResults"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__integerType"
+                "query": string
+                    description: "Search keyword."
+                    label: "query"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "skillLevel": string
+                    description: "Customer skill level."
+                    label: "skillLevel"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "output": string
+                    description: "JSON string containing matching products."
+                    label: "output"
+                    is_displayable: False
+                    is_used_by_planner: True
+
+        Create_Meaningful_Event:
+            description: "Creates a Meaningful Event record."
+            label: "Create Meaningful Event"
+            require_user_confirmation: False
+            include_in_progress_indicator: False
+            source: "Create_Meaningful_Event"
+            target: "flow://Create_Meaningful_Event"
+
+            inputs:
+                "agentNote": string
+                    label: "agentNote"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "contactId": string
+                    label: "contactId"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "eventDescription": string
+                    label: "eventDescription"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "eventType": string
+                    label: "eventType"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "metadataJson": string
+                    label: "metadataJson"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "sessionId": string
+                    label: "sessionId"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "outputError": string
+                    label: "outputError"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputRecordId": string
+                    label: "outputRecordId"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputSuccess": boolean
+                    label: "outputSuccess"
+                    is_displayable: False
+                    is_used_by_planner: True
+
+        Update_Contact_Profile:
+            description: "Updates profile fields on a Contact record."
+            label: "Update Contact Profile"
+            require_user_confirmation: False
+            include_in_progress_indicator: False
+            source: "Update_Contact_Profile"
+            target: "flow://Update_Contact_Profile"
+
+            inputs:
+                "budgetRange": string
+                    label: "budgetRange"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "homeAge": string
+                    label: "homeAge"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "homeType": string
+                    label: "homeType"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "contactId": string
+                    label: "contactId"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "preferredBrands": string
+                    label: "preferredBrands"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "projectTimeline": string
+                    label: "projectTimeline"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "projectTypes": string
+                    label: "projectTypes"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "skillLevel": string
+                    label: "skillLevel"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "concerns": string
+                    label: "concerns"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "outputError": string
+                    label: "outputError"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputFieldsUpdated": string
+                    label: "outputFieldsUpdated"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputSuccess": boolean
+                    label: "outputSuccess"
+                    is_displayable: False
+                    is_used_by_planner: True
+
+topic quote_checkout:
+    label: "Quote & Checkout"
+
+    description: "Help customers get quotes, process orders, and complete checkout. Use this topic when the customer wants to buy, checkout, get a quote, requests bulk pricing, asks about delivery options, or is ready to place an order."
+
+    reasoning:
+        instructions: ->
+            | You help customers complete purchases and generate quotes for larger orders. Handle checkout flow and quote requests.
+
+                CRITICAL — RESPONSE FORMAT:
+                When initiating checkout, you MUST include a uiDirective JSON block with action "INITIATE_CHECKOUT":
+
+                {"uiDirective": {"action": "INITIATE_CHECKOUT", "payload": {"products": [...], "checkoutType": "standard"}}}
+
+                For B2B quote requests:
+                {"uiDirective": {"action": "REQUEST_QUOTE", "payload": {"products": [...], "quoteDetails": {"deliveryAddress": "...", "requestedDate": "..."}}}}
+
+                For order confirmations:
+                {"uiDirective": {"action": "CONFIRM_ORDER", "payload": {"orderId": "...", "totalAmount": 0.00, "estimatedDelivery": "..."}}}
+
+                SPACE-SPECIFIC CHECKOUT:
+                - CONSUMER space: Standard checkout, emphasize delivery options and warranties, offer installation services
+                - B2B space: Generate formal quotes, apply volume pricing, offer credit terms, coordinate jobsite delivery
+
+                BULK PRICING:
+                For B2B customers ordering bulk quantities, apply the appropriate pricing tier:
+                - Display original price and discounted bulk price
+                - Show quantity thresholds for next pricing tier
+                - Offer to generate a formal quote for large orders
+
+                CONVERSATIONAL INTELLIGENCE:
+                Checkout conversations reveal purchase intent — always call "Create Meaningful Event" to capture the purchase for future personalization. For B2B, capture recurring order patterns.
+
+        actions:
+            Initiate_Checkout: @actions.Initiate_Checkout
+                with products = ...
+                with checkoutType = ...
+
+            Generate_Quote: @actions.Generate_Quote
+                with products = ...
+                with deliveryAddress = ...
+                with requestedDate = ...
+
+            Create_Meaningful_Event: @actions.Create_Meaningful_Event
+                with agentNote = ...
+                with contactId = ...
+                with eventDescription = ...
+                with eventType = ...
+                with metadataJson = ...
+                with sessionId = ...
+
+
+    actions:
+        Initiate_Checkout:
+            description: "Initiates the checkout process for selected products."
+            label: "Initiate Checkout"
+            require_user_confirmation: True
+            include_in_progress_indicator: True
+            progress_indicator_message: "Preparing checkout..."
+            source: "Initiate_Checkout"
+            target: "apex://CheckoutService"
+
+            inputs:
+                "products": string
+                    description: "JSON array of products to checkout"
+                    label: "products"
+                    is_required: True
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "checkoutType": string
+                    description: "Type of checkout: standard, quote, bulk"
+                    label: "checkoutType"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "checkoutUrl": string
+                    description: "URL to complete checkout"
+                    label: "checkoutUrl"
+                    is_displayable: True
+                    is_used_by_planner: True
+                "orderId": string
+                    description: "Generated order ID"
+                    label: "orderId"
+                    is_displayable: True
+                    is_used_by_planner: True
+
+        Generate_Quote:
+            description: "Generates a formal quote for B2B customers."
+            label: "Generate Quote"
+            require_user_confirmation: False
+            include_in_progress_indicator: True
+            progress_indicator_message: "Generating quote..."
+            source: "Generate_Quote"
+            target: "apex://QuoteService"
+
+            inputs:
+                "products": string
+                    description: "JSON array of products for quote"
+                    label: "products"
+                    is_required: True
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "deliveryAddress": string
+                    description: "Delivery address for the order"
+                    label: "deliveryAddress"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "requestedDate": string
+                    description: "Requested delivery date"
+                    label: "requestedDate"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "quoteId": string
+                    description: "Generated quote ID"
+                    label: "quoteId"
+                    is_displayable: True
+                    is_used_by_planner: True
+                "quoteTotal": number
+                    description: "Total quote amount"
+                    label: "quoteTotal"
+                    is_displayable: True
+                    is_used_by_planner: True
+                "quoteUrl": string
+                    description: "URL to view/accept quote"
+                    label: "quoteUrl"
+                    is_displayable: True
+                    is_used_by_planner: True
+
+        Create_Meaningful_Event:
+            description: "Creates a Meaningful Event record."
+            label: "Create Meaningful Event"
+            require_user_confirmation: False
+            include_in_progress_indicator: False
+            source: "Create_Meaningful_Event"
+            target: "flow://Create_Meaningful_Event"
+
+            inputs:
+                "agentNote": string
+                    label: "agentNote"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "contactId": string
+                    label: "contactId"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "eventDescription": string
+                    label: "eventDescription"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "eventType": string
+                    label: "eventType"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "metadataJson": string
+                    label: "metadataJson"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "sessionId": string
+                    label: "sessionId"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "outputError": string
+                    label: "outputError"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputRecordId": string
+                    label: "outputRecordId"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputSuccess": boolean
+                    label: "outputSuccess"
+                    is_displayable: False
+                    is_used_by_planner: True
+
+topic Welcome_Greeting:
+    label: "Welcome Greeting"
+
+    description: "Greet recognized customers with a personalized welcome based on their profile, purchase history, and active projects. Only use this topic for KNOWN customers with profile data in the session context."
+
+    reasoning:
+        instructions: ->
+            | Generate a personalized welcome for recognized customers. Use their name, reference active projects, and acknowledge their loyalty status if applicable.
+
+                CRITICAL — RESPONSE FORMAT:
+                You MUST respond with a uiDirective JSON block with action "WELCOME_SCENE":
+
+                {"uiDirective": {"action": "WELCOME_SCENE", "payload": {"welcomeMessage": "Welcome back, Mike!", "welcomeSubtext": "Ready to continue your kitchen renovation?", "sceneContext": {"setting": "kitchen", "generateBackground": false}}}}
+
+                PERSONALIZATION:
+                - For KNOWN customers: Greet by first name, reference their most recent project or purchase, acknowledge loyalty tier
+                - Include relevant suggested actions based on their profile (e.g., "Continue your kitchen project", "Restock supplies", "Check order status")
+
+                SPACE-SPECIFIC WELCOME:
+                - CONSUMER: "Welcome back, [Name]! Ready to continue your [project]?"
+                - B2B: "Good morning, [Name] from [Company]. How can I help with your projects today?"
+
+                SCENE CONTEXT:
+                Set the scene based on the customer's active project or most recent purchase category:
+                - Kitchen project → setting: "kitchen"
+                - Outdoor/deck project → setting: "outdoor"
+                - General/unknown → setting: "neutral"
+
+                Use "generateBackground": false for the welcome scene to load quickly.
+
+        actions:
+            none
+
+
+    actions:
+        # No actions needed - welcome uses session context only
+
+topic Identity_Capture:
+    label: "Identity Capture"
+
+    description: "Capture customer identity when an anonymous user provides their name and email address. Use this topic when an anonymous customer provides contact information, asks to save preferences, or wants to create an account."
+
+    reasoning:
+        instructions: ->
+            | Capture customer identity information when provided by anonymous users.
+
+                IMPORTANT: Before creating a Contact, you MUST collect BOTH the customer's name AND email address. Do not create placeholder records.
+
+                When the customer provides their name and email:
+                1. Call the Identify Customer By Email action to check if they already exist
+                2. If found, acknowledge them and transition to Welcome Greeting
+                3. If not found, call Create Contact action with their information
+
+                After successful identification, respond with:
+
+                {"uiDirective": {"action": "IDENTIFY_CUSTOMER", "payload": {"customerEmail": "...", "customerName": "...", "identified": true}}}
+
+                If the customer only provides partial information, ask for the missing piece conversationally:
+                - Has name only: "Thanks [Name]! What's the best email to reach you at?"
+                - Has email only: "Great! And what name should I use?"
+
+                NEVER create a Contact with placeholder values like "Customer from chat".
+
+        actions:
+            IdentifyCustomerByEmail: @actions.IdentifyCustomerByEmail
+                with emailAddress = ...
+
+            Create_Contact: @actions.Create_Contact
+                with firstName = ...
+                with lastName = ...
+                with email = ...
+
+
+    actions:
+        IdentifyCustomerByEmail:
+            description: "Identify a customer by their email address and return their contact record."
+            label: "Identify Customer By Email"
+            require_user_confirmation: False
+            include_in_progress_indicator: True
+            source: "SvcCopilotTmpl__IdentifyCustomerByEmail"
+            target: "flow://SvcCopilotTmpl__IdentifyCustomer"
+
+            inputs:
+                "emailAddress": string
+                    description: "The email address to look up."
+                    label: "Email Address"
+                    is_required: True
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "contactRecord": object
+                    description: "The Contact record if found."
+                    label: "Contact record"
+                    is_displayable: True
+                    is_used_by_planner: True
+                    complex_data_type_name: "lightning__recordInfoType"
+
+        Create_Contact:
+            description: "Creates a new Contact record for a new customer."
+            label: "Create Contact"
+            require_user_confirmation: False
+            include_in_progress_indicator: True
+            progress_indicator_message: "Creating your profile..."
+            source: "Create_Contact"
+            target: "flow://Create_Contact"
+
+            inputs:
+                "firstName": string
+                    description: "Customer's first name"
+                    label: "firstName"
+                    is_required: True
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "lastName": string
+                    description: "Customer's last name"
+                    label: "lastName"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "email": string
+                    description: "Customer's email address"
+                    label: "email"
+                    is_required: True
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "contactId": string
+                    description: "The ID of the created Contact"
+                    label: "contactId"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputSuccess": boolean
+                    description: "True if Contact was created successfully"
+                    label: "outputSuccess"
+                    is_displayable: False
+                    is_used_by_planner: True
+
+topic Profile_Enrichment_Capture:
+    label: "Profile Enrichment Capture"
+
+    description: "Capture additional profile information from customers during conversation. Use this topic when the customer reveals preferences, project details, home information, or other capturable profile fields."
+
+    reasoning:
+        instructions: ->
+            | Capture profile enrichment data discovered during conversation. This topic runs in parallel with other topics — do not interrupt the main conversation flow.
+
+                CAPTURABLE FIELDS:
+                - Home type (single-family, condo, townhouse, apartment, commercial)
+                - Home age
+                - Skill level (beginner, intermediate, advanced, professional)
+                - Preferred brands
+                - Budget range
+                - Project types (kitchen renovation, bathroom remodel, deck building, etc.)
+                - Project timeline
+                - Concerns (budget, code compliance, timeline, safety, durability)
+
+                FOR B2B CUSTOMERS:
+                - Company name
+                - Company type (general contractor, electrician, plumber, property manager, etc.)
+                - Trade specialty
+                - License number
+                - Typical project volume
+
+                When you detect capturable information in the conversation, call Update Contact Profile in the background and include a capture notification in your uiDirective:
+
+                {"captures": [{"type": "profile_enrichment", "label": "Profile Updated: Skill Level"}]}
+
+        actions:
+            Update_Contact_Profile: @actions.Update_Contact_Profile
+                with budgetRange = ...
+                with homeAge = ...
+                with homeType = ...
+                with contactId = ...
+                with preferredBrands = ...
+                with projectTimeline = ...
+                with projectTypes = ...
+                with skillLevel = ...
+                with concerns = ...
+
+
+    actions:
+        Update_Contact_Profile:
+            description: "Updates profile fields on a Contact record."
+            label: "Update Contact Profile"
+            require_user_confirmation: False
+            include_in_progress_indicator: False
+            source: "Update_Contact_Profile"
+            target: "flow://Update_Contact_Profile"
+
+            inputs:
+                "budgetRange": string
+                    label: "budgetRange"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "homeAge": string
+                    label: "homeAge"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "homeType": string
+                    label: "homeType"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "contactId": string
+                    label: "contactId"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "preferredBrands": string
+                    label: "preferredBrands"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "projectTimeline": string
+                    label: "projectTimeline"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "projectTypes": string
+                    label: "projectTypes"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "skillLevel": string
+                    label: "skillLevel"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "concerns": string
+                    label: "concerns"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "outputError": string
+                    label: "outputError"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputFieldsUpdated": string
+                    label: "outputFieldsUpdated"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputSuccess": boolean
+                    label: "outputSuccess"
+                    is_displayable: False
+                    is_used_by_planner: True
+
+topic Create_Chat_Summary:
+    label: "Create Chat Summary"
+
+    description: "Create a summary of the conversation when the session ends. This topic is triggered automatically at the end of a conversation."
+
+    reasoning:
+        instructions: ->
+            | Summarize the conversation and save it to the customer's record for future reference.
+
+                SUMMARY CONTENT:
+                - Main topics discussed (products viewed, projects planned, questions asked)
+                - Key outcomes (purchases made, quotes generated, recommendations given)
+                - Customer sentiment (positive, neutral, negative)
+                - Follow-up needed (yes/no and reason)
+
+                Call the Create Chat Summary action with the conversation details.
+
+        actions:
+            Create_Chat_Summary: @actions.Create_Chat_Summary
+                with contactId = ...
+                with sessionId = ...
+                with summary = ...
+                with sentiment = ...
+                with topicsDiscussed = ...
+
+
+    actions:
+        Create_Chat_Summary:
+            description: "Creates a Chat Summary record to save conversation highlights."
+            label: "Create Chat Summary"
+            require_user_confirmation: False
+            include_in_progress_indicator: False
+            source: "Create_Chat_Summary"
+            target: "flow://Create_Chat_Summary"
+
+            inputs:
+                "contactId": string
+                    description: "The Salesforce Contact ID"
+                    label: "contactId"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "sessionId": string
+                    description: "The unique session identifier"
+                    label: "sessionId"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "summary": string
+                    description: "Brief summary of the conversation"
+                    label: "summary"
+                    is_required: True
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "sentiment": string
+                    description: "Customer sentiment: positive, neutral, negative"
+                    label: "sentiment"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+                "topicsDiscussed": string
+                    description: "Semicolon-separated list of topics discussed"
+                    label: "topicsDiscussed"
+                    is_required: False
+                    is_user_input: True
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "outputSuccess": boolean
+                    description: "True if summary was created successfully"
+                    label: "outputSuccess"
+                    is_displayable: False
+                    is_used_by_planner: True
+                "outputError": string
+                    description: "Error message if creation failed"
+                    label: "outputError"
+                    is_displayable: False
+                    is_used_by_planner: True
+
+topic escalation:
+    label: "Escalation"
+
+    description: "Transfer the conversation to a live human agent when the customer requests human assistance, the AI cannot resolve their issue, or for complex situations requiring human judgment."
+
+    reasoning:
+        instructions: ->
+            | Transfer to a human agent when:
+                - Customer explicitly requests human assistance
+                - Complex quote negotiations beyond standard pricing
+                - Complaints or disputes requiring human resolution
+                - Technical questions beyond product catalog knowledge
+                - Urgent jobsite issues for B2B customers
+
+                Before transferring, acknowledge the request and let them know what to expect.
+
+        actions:
+            Transfer_To_Agent: @actions.Transfer_To_Agent
+                with reason = ...
+                with priority = ...
+
+
+    actions:
+        Transfer_To_Agent:
+            description: "Transfers the conversation to a live human agent."
+            label: "Transfer to Agent"
+            require_user_confirmation: True
+            include_in_progress_indicator: True
+            progress_indicator_message: "Connecting you with an agent..."
+            source: "Transfer_To_Agent"
+            target: "apex://AgentTransferService"
+
+            inputs:
+                "reason": string
+                    description: "Reason for the transfer"
+                    label: "reason"
+                    is_required: True
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+                "priority": string
+                    description: "Transfer priority: normal, high, urgent"
+                    label: "priority"
+                    is_required: False
+                    is_user_input: False
+                    complex_data_type_name: "lightning__textType"
+
+            outputs:
+                "transferSuccess": boolean
+                    description: "True if transfer was successful"
+                    label: "transferSuccess"
+                    is_displayable: False
+                    is_used_by_planner: True
+
+topic off_topic:
+    label: "Off Topic"
+
+    description: "Handle questions that are outside the scope of home improvement retail."
+
+    reasoning:
+        instructions: ->
+            | Politely redirect off-topic questions back to home improvement topics.
+
+                Response template:
+                "I'm your project advisor for home improvement, so I'm best equipped to help with product recommendations, project planning, and orders. Is there a project I can help you with today?"
+
+                Do not attempt to answer questions about:
+                - Topics unrelated to home improvement
+                - Competitor pricing or products
+                - Personal advice unrelated to projects
+
+        actions:
+            none
+
+
+    actions:
+        # No actions needed
+
+topic ambiguous_question:
+    label: "Ambiguous Question"
+
+    description: "Handle unclear or vague questions by asking for clarification."
+
+    reasoning:
+        instructions: ->
+            | When the customer's question is unclear, ask clarifying questions to understand their needs.
+
+                CLARIFICATION STRATEGIES:
+                - Ask about the specific project or room they're working on
+                - Ask about their skill level if recommending tools
+                - Ask about quantity needs if discussing materials
+                - For B2B, ask about project timeline and delivery requirements
+
+                Keep clarification questions conversational and helpful.
+
+        actions:
+            none
+
+
+    actions:
+        # No actions needed

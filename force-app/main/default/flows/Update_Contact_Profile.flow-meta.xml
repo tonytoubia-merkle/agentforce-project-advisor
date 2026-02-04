@@ -1,76 +1,59 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Flow xmlns="http://soap.sforce.com/2006/04/metadata">
     <apiVersion>60.0</apiVersion>
-    <description>Updates a contact profile with captured information. Includes guard for anonymous users (no contactId).</description>
-    <interviewLabel>Update Contact Profile {!$Flow.CurrentDateTime}</interviewLabel>
-    <label>Update Contact Profile</label>
-    <processMetadataValues>
-        <name>BuilderType</name>
-        <value>
-            <stringValue>LightningFlowBuilder</stringValue>
-        </value>
-    </processMetadataValues>
-    <processType>AutoLaunchedFlow</processType>
-    <start>
+    <assignments>
+        <name>Set_Error</name>
+        <label>Set Error</label>
+        <locationX>578</locationX>
+        <locationY>374</locationY>
+        <assignmentItems>
+            <assignToReference>outputSuccess</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <booleanValue>false</booleanValue>
+            </value>
+        </assignmentItems>
+        <assignmentItems>
+            <assignToReference>outputError</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <elementReference>$Flow.FaultMessage</elementReference>
+            </value>
+        </assignmentItems>
+    </assignments>
+    <assignments>
+        <name>Set_Skipped</name>
+        <label>Set Skipped</label>
         <locationX>50</locationX>
-        <locationY>0</locationY>
-        <connector>
-            <targetReference>Check_ContactId</targetReference>
-        </connector>
-    </start>
-    <status>Active</status>
-    <variables>
-        <name>contactId</name>
-        <dataType>String</dataType>
-        <isCollection>false</isCollection>
-        <isInput>true</isInput>
-        <isOutput>false</isOutput>
-    </variables>
-    <variables>
-        <name>fieldName</name>
-        <dataType>String</dataType>
-        <isCollection>false</isCollection>
-        <isInput>true</isInput>
-        <isOutput>false</isOutput>
-    </variables>
-    <variables>
-        <name>fieldValue</name>
-        <dataType>String</dataType>
-        <isCollection>false</isCollection>
-        <isInput>true</isInput>
-        <isOutput>false</isOutput>
-    </variables>
-    <variables>
-        <name>confidence</name>
-        <dataType>String</dataType>
-        <isCollection>false</isCollection>
-        <isInput>true</isInput>
-        <isOutput>false</isOutput>
-    </variables>
-    <variables>
-        <name>capturedFrom</name>
-        <dataType>String</dataType>
-        <isCollection>false</isCollection>
-        <isInput>true</isInput>
-        <isOutput>false</isOutput>
-    </variables>
-    <variables>
-        <name>outputSuccess</name>
-        <dataType>Boolean</dataType>
-        <isCollection>false</isCollection>
-        <isInput>false</isInput>
-        <isOutput>true</isOutput>
-        <value>
-            <booleanValue>false</booleanValue>
-        </value>
-    </variables>
-    <variables>
-        <name>outputError</name>
-        <dataType>String</dataType>
-        <isCollection>false</isCollection>
-        <isInput>false</isInput>
-        <isOutput>true</isOutput>
-    </variables>
+        <locationY>254</locationY>
+        <assignmentItems>
+            <assignToReference>outputSuccess</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <booleanValue>false</booleanValue>
+            </value>
+        </assignmentItems>
+        <assignmentItems>
+            <assignToReference>outputError</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <stringValue>Skipped: No contactId provided (anonymous user)</stringValue>
+            </value>
+        </assignmentItems>
+    </assignments>
+    <assignments>
+        <name>Set_Success</name>
+        <label>Set Success</label>
+        <locationX>314</locationX>
+        <locationY>494</locationY>
+        <assignmentItems>
+            <assignToReference>outputSuccess</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <booleanValue>true</booleanValue>
+            </value>
+        </assignmentItems>
+    </assignments>
     <decisions>
         <name>Check_ContactId</name>
         <label>Check ContactId</label>
@@ -103,26 +86,16 @@
             <label>No ContactId</label>
         </rules>
     </decisions>
-    <assignments>
-        <name>Set_Skipped</name>
-        <label>Set Skipped</label>
-        <locationX>50</locationX>
-        <locationY>254</locationY>
-        <assignmentItems>
-            <assignToReference>outputSuccess</assignToReference>
-            <operator>Assign</operator>
-            <value>
-                <booleanValue>false</booleanValue>
-            </value>
-        </assignmentItems>
-        <assignmentItems>
-            <assignToReference>outputError</assignToReference>
-            <operator>Assign</operator>
-            <value>
-                <stringValue>Skipped: No contactId provided (anonymous user)</stringValue>
-            </value>
-        </assignmentItems>
-    </assignments>
+    <description>Updates a contact profile with captured information. Includes guard for anonymous users (no contactId).</description>
+    <interviewLabel>Update Contact Profile {!$Flow.CurrentDateTime}</interviewLabel>
+    <label>Update Contact Profile</label>
+    <processMetadataValues>
+        <name>BuilderType</name>
+        <value>
+            <stringValue>LightningFlowBuilder</stringValue>
+        </value>
+    </processMetadataValues>
+    <processType>AutoLaunchedFlow</processType>
     <recordLookups>
         <name>Get_Contact</name>
         <label>Get Contact</label>
@@ -173,37 +146,64 @@
         </inputAssignments>
         <object>Contact</object>
     </recordUpdates>
-    <assignments>
-        <name>Set_Success</name>
-        <label>Set Success</label>
-        <locationX>314</locationX>
-        <locationY>494</locationY>
-        <assignmentItems>
-            <assignToReference>outputSuccess</assignToReference>
-            <operator>Assign</operator>
-            <value>
-                <booleanValue>true</booleanValue>
-            </value>
-        </assignmentItems>
-    </assignments>
-    <assignments>
-        <name>Set_Error</name>
-        <label>Set Error</label>
-        <locationX>578</locationX>
-        <locationY>374</locationY>
-        <assignmentItems>
-            <assignToReference>outputSuccess</assignToReference>
-            <operator>Assign</operator>
-            <value>
-                <booleanValue>false</booleanValue>
-            </value>
-        </assignmentItems>
-        <assignmentItems>
-            <assignToReference>outputError</assignToReference>
-            <operator>Assign</operator>
-            <value>
-                <elementReference>$Flow.FaultMessage</elementReference>
-            </value>
-        </assignmentItems>
-    </assignments>
+    <start>
+        <locationX>50</locationX>
+        <locationY>0</locationY>
+        <connector>
+            <targetReference>Check_ContactId</targetReference>
+        </connector>
+    </start>
+    <status>Active</status>
+    <variables>
+        <name>capturedFrom</name>
+        <dataType>String</dataType>
+        <isCollection>false</isCollection>
+        <isInput>true</isInput>
+        <isOutput>false</isOutput>
+    </variables>
+    <variables>
+        <name>confidence</name>
+        <dataType>String</dataType>
+        <isCollection>false</isCollection>
+        <isInput>true</isInput>
+        <isOutput>false</isOutput>
+    </variables>
+    <variables>
+        <name>contactId</name>
+        <dataType>String</dataType>
+        <isCollection>false</isCollection>
+        <isInput>true</isInput>
+        <isOutput>false</isOutput>
+    </variables>
+    <variables>
+        <name>fieldName</name>
+        <dataType>String</dataType>
+        <isCollection>false</isCollection>
+        <isInput>true</isInput>
+        <isOutput>false</isOutput>
+    </variables>
+    <variables>
+        <name>fieldValue</name>
+        <dataType>String</dataType>
+        <isCollection>false</isCollection>
+        <isInput>true</isInput>
+        <isOutput>false</isOutput>
+    </variables>
+    <variables>
+        <name>outputError</name>
+        <dataType>String</dataType>
+        <isCollection>false</isCollection>
+        <isInput>false</isInput>
+        <isOutput>true</isOutput>
+    </variables>
+    <variables>
+        <name>outputSuccess</name>
+        <dataType>Boolean</dataType>
+        <isCollection>false</isCollection>
+        <isInput>false</isInput>
+        <isOutput>true</isOutput>
+        <value>
+            <booleanValue>false</booleanValue>
+        </value>
+    </variables>
 </Flow>

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>SkillLevel__c</fullName>
+    <description>Recommended skill level for using this product</description>
+    <externalId>false</externalId>
+    <label>Skill Level</label>
+    <required>false</required>
+    <trackFeedHistory>false</trackFeedHistory>
+    <trackHistory>false</trackHistory>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>beginner</fullName>
+                <default>false</default>
+                <label>Beginner</label>
+            </value>
+            <value>
+                <fullName>intermediate</fullName>
+                <default>false</default>
+                <label>Intermediate</label>
+            </value>
+            <value>
+                <fullName>advanced</fullName>
+                <default>false</default>
+                <label>Advanced</label>
+            </value>
+            <value>
+                <fullName>professional</fullName>
+                <default>false</default>
+                <label>Professional</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

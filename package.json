@@ -7,7 +7,15 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx",
-    "test": "vitest"
+    "test": "vitest",
+    "sf:deploy": "node scripts/deploy.js",
+    "sf:deploy:validate": "node scripts/deploy.js --validate",
+    "sf:deploy:flows": "node scripts/deploy.js --flows",
+    "sf:deploy:apex": "node scripts/deploy.js --apex",
+    "sf:deploy:objects": "node scripts/deploy.js --objects",
+    "sf:get-agent-id": "node scripts/get-agent-id.js",
+    "vercel:env": "node scripts/push-env-to-vercel.js",
+    "vercel:env:dry-run": "node scripts/push-env-to-vercel.js --dry-run"
   },
   "dependencies": {
     "clsx": "^2.0.0",
